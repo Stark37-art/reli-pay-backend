@@ -216,39 +216,29 @@ app.get('/user/:email', (req, res) => {
   res.status(200).json({ email, username, earnings, screenTime, withdrawRequests, lastLogin });
 });
 
-// ========== NEW: Postback endpoint for AdGem to credit user earnings ==========
+// -------------- NEW POSTBACK ENDPOINT --------------
+
 app.get('/postback', (req, res) => {
-  const { user_id, amount, secret } = req.query;
+  const userEmail = req.query.USER_EMAIL_OR_ID;
+  const amount = Number(req.query.AMOUNT);
 
-  // TODO: Replace this with your actual secret configured in AdGem dashboard
-  const EXPECTED_SECRET = 'YOUR_SECRET_HERE';
-
-  if (secret !== EXPECTED_SECRET) {
-    return res.status(403).send('Forbidden: Invalid secret');
+  if (!userEmail || isNaN(amount)) {
+    return res.status(400).send('Missing or invalid parameters');
   }
 
-  if (!user_id || !amount) {
-    return res.status(400).send('Bad Request: Missing user_id or amount');
-  }
-
-  const user = users[user_id];
-  if (!user) {
+  if (!users[userEmail]) {
     return res.status(404).send('User not found');
   }
 
-  const amt = parseFloat(amount);
-  if (isNaN(amt) || amt <= 0) {
-    return res.status(400).send('Bad Request: Invalid amount');
-  }
-
-  user.earnings += amt;
+  users[userEmail].earnings += amount;
   saveUsers();
 
-  console.log(`Credited ₹${amt} to user ${user_id}. Total earnings: ₹${user.earnings}`);
-
-  res.send('OK');
+  res.status(200).send('Earnings updated');
 });
+
+// -----------------------------------------------
 
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
 });
+
