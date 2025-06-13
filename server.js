@@ -1,12 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const USERS_PATH = './users.json';
 const FEEDBACKS_PATH = './feedbacks.json';
 
 const app = express();
 const PORT = 3000;
+
+// 🔐 Tapjoy Secret Key (from your dashboard)
+const TAPJOY_SECRET_KEY = 'HrZyLAjf7CbbVPMjaXdx';
 
 app.use(cors());
 app.use(express.json());
@@ -71,7 +75,7 @@ app.post('/login', (req, res) => {
   res.status(200).json({ success: true, message: 'Login successful!', username: user.username, lastLogin: user.lastLogin });
 });
 
-// Add earnings
+// Add earnings manually
 app.post('/activity', (req, res) => {
   const { email, earningsEarned } = req.body;
   if (!users[email]) return res.status(404).json({ message: 'User not found.' });
@@ -146,7 +150,7 @@ app.post('/withdraw', (req, res) => {
   res.status(200).json({ message: 'Withdrawal request submitted!' });
 });
 
-// Cancel withdrawal request
+// Cancel withdrawal
 app.post('/user/withdraw/cancel', (req, res) => {
   const { email, date } = req.body;
   if (!users[email]) return res.status(404).json({ message: 'User not found.' });
@@ -161,7 +165,7 @@ app.post('/user/withdraw/cancel', (req, res) => {
   res.status(200).json({ message: 'Withdrawal request cancelled.' });
 });
 
-// Admin: get all withdrawal requests
+// Admin: get all withdrawals
 app.get('/admin/withdrawals', (req, res) => {
   const allRequests = [];
   for (const email in users) {
@@ -199,7 +203,7 @@ app.post('/admin/approve', (req, res) => {
   res.status(200).json({ message: 'Withdrawal approved.' });
 });
 
-// Get user's withdrawal requests
+// User's withdrawals
 app.get('/user/:email/withdrawals', (req, res) => {
   const { email } = req.params;
   if (!users[email]) return res.status(404).json({ message: 'User not found.' });
@@ -216,29 +220,30 @@ app.get('/user/:email', (req, res) => {
   res.status(200).json({ email, username, earnings, screenTime, withdrawRequests, lastLogin });
 });
 
-// -------------- NEW POSTBACK ENDPOINT --------------
+// ✅ Tapjoy Callback Endpoint (Secure)
+app.get('/tapjoy/callback', (req, res) => {
+  const { user_id, currency, amount, verifier } = req.query;
 
-app.get('/postback', (req, res) => {
-  const userEmail = req.query.USER_EMAIL_OR_ID;
-  const amount = Number(req.query.AMOUNT);
-
-  if (!userEmail || isNaN(amount)) {
-    return res.status(400).send('Missing or invalid parameters');
+  if (!user_id || !amount || !verifier) {
+    return res.status(400).send('Missing parameters');
   }
 
-  if (!users[userEmail]) {
+  const expectedVerifier = crypto.createHash('sha1').update(user_id + amount + TAPJOY_SECRET_KEY).digest('hex');
+
+  if (verifier !== expectedVerifier) {
+    return res.status(403).send('Invalid verifier');
+  }
+
+  if (!users[user_id]) {
     return res.status(404).send('User not found');
   }
 
-  users[userEmail].earnings += amount;
+  users[user_id].earnings += parseFloat(amount);
   saveUsers();
 
-  res.status(200).send('Earnings updated');
+  return res.status(200).send('Earnings updated');
 });
-
-// -----------------------------------------------
 
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
 });
-
